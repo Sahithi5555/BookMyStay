@@ -1,7 +1,7 @@
 /**
  * BookMyStay Application
  * @author Sahithi
- * @version 5.0
+ * @version 6.0
  */
 
 import java.util.*;
@@ -59,6 +59,10 @@ class RoomInventory {
         return availability.get(roomType);
     }
 
+    void reduceRoom(String roomType) {
+        availability.put(roomType, availability.get(roomType) - 1);
+    }
+
     HashMap<String, Integer> getAllRooms() {
         return availability;
     }
@@ -96,7 +100,6 @@ class SearchService {
 }
 
 // ---------------- UC5 ----------------
-// Reservation class
 class Reservation {
     String guestName;
     String roomType;
@@ -111,7 +114,6 @@ class Reservation {
     }
 }
 
-// Booking Queue
 class BookingQueue {
 
     private Queue<Reservation> queue;
@@ -130,6 +132,57 @@ class BookingQueue {
 
         for (Reservation r : queue) {
             r.display();
+        }
+    }
+
+    Queue<Reservation> getQueue() {
+        return queue;
+    }
+}
+
+// ---------------- UC6 ----------------
+class BookingService {
+
+    private HashMap<String, Set<String>> allocatedRooms;
+
+    BookingService() {
+        allocatedRooms = new HashMap<>();
+    }
+
+    void processBookings(BookingQueue bookingQueue, RoomInventory inventory) {
+
+        System.out.println("\n--- Processing Bookings ---");
+
+        Queue<Reservation> queue = bookingQueue.getQueue();
+
+        while (!queue.isEmpty()) {
+
+            Reservation r = queue.poll();
+            String roomType = r.roomType;
+
+            int available = inventory.getAvailability(roomType);
+
+            if (available > 0) {
+
+                String roomId = roomType.substring(0, 2).toUpperCase()
+                        + "_" + UUID.randomUUID().toString().substring(0, 5);
+
+                allocatedRooms.putIfAbsent(roomType, new HashSet<>());
+
+                if (!allocatedRooms.get(roomType).contains(roomId)) {
+
+                    allocatedRooms.get(roomType).add(roomId);
+
+                    inventory.reduceRoom(roomType);
+
+                    System.out.println("Booking Confirmed for " + r.guestName +
+                            " | Room Type: " + roomType +
+                            " | Room ID: " + roomId);
+                }
+
+            } else {
+                System.out.println("Booking Failed for " + r.guestName + " (No rooms available)");
+            }
         }
     }
 }
@@ -158,5 +211,9 @@ public class BookMyStayApp {
         bookingQueue.addRequest(new Reservation("Charlie", "Suite Room"));
 
         bookingQueue.showQueue();
+
+        // UC6
+        BookingService bookingService = new BookingService();
+        bookingService.processBookings(bookingQueue, inventory);
     }
 }
