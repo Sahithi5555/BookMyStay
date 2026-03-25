@@ -1,7 +1,7 @@
 /**
  * BookMyStay Application
  * @author Sahithi
- * @version 3.0
+ * @version 4.0
  */
 
 import java.util.HashMap;
@@ -43,8 +43,6 @@ class SuiteRoom extends Room {
 }
 
 // ---------------- UC3 ----------------
-// Inventory class using HashMap
-
 class RoomInventory {
 
     private HashMap<String, Integer> availability;
@@ -65,11 +63,38 @@ class RoomInventory {
         availability.put(roomType, count);
     }
 
-    void displayInventory() {
-        System.out.println("Current Inventory:");
+    HashMap<String, Integer> getAllRooms() {
+        return availability;
+    }
+}
 
-        for (String key : availability.keySet()) {
-            System.out.println(key + " -> " + availability.get(key));
+// ---------------- UC4 ----------------
+class SearchService {
+
+    void searchAvailableRooms(RoomInventory inventory) {
+
+        System.out.println("\n--- Available Rooms ---\n");
+
+        for (String roomType : inventory.getAllRooms().keySet()) {
+
+            int available = inventory.getAvailability(roomType);
+
+            if (available > 0) {
+
+                Room room = null;
+
+                if (roomType.equals("Single Room")) {
+                    room = new SingleRoom();
+                } else if (roomType.equals("Double Room")) {
+                    room = new DoubleRoom();
+                } else if (roomType.equals("Suite Room")) {
+                    room = new SuiteRoom();
+                }
+
+                room.displayRoomDetails();
+                System.out.println("Available: " + available);
+                System.out.println();
+            }
         }
     }
 }
@@ -84,34 +109,17 @@ public class BookMyStayApp {
 
 
         // ---------------- UC2 ----------------
-        System.out.println("\nRoom Details:\n");
-
         Room single = new SingleRoom();
         Room doub = new DoubleRoom();
         Room suite = new SuiteRoom();
 
-        single.displayRoomDetails();
-        System.out.println();
-
-        doub.displayRoomDetails();
-        System.out.println();
-
-        suite.displayRoomDetails();
-
 
         // ---------------- UC3 ----------------
-        System.out.println("\n--- Inventory Management ---\n");
-
         RoomInventory inventory = new RoomInventory();
 
-        inventory.displayInventory();
 
-        System.out.println("\nChecking availability of Single Room:");
-        System.out.println(inventory.getAvailability("Single Room"));
-
-        System.out.println("\nUpdating Single Room availability...");
-        inventory.updateAvailability("Single Room", 4);
-
-        inventory.displayInventory();
+        // ---------------- UC4 ----------------
+        SearchService searchService = new SearchService();
+        searchService.searchAvailableRooms(inventory);
     }
 }
