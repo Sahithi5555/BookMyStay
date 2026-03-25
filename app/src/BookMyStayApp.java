@@ -1,4 +1,39 @@
+/**
+ * BookMyStay Application
+ * @author Sahithi
+ * @version 9.0
+ */
+
 import java.util.*;
+
+// ---------------- EXCEPTION ----------------
+class InvalidBookingException extends Exception {
+    InvalidBookingException(String message) {
+        super(message);
+    }
+}
+
+// ---------------- VALIDATOR ----------------
+class BookingValidator {
+
+    void validate(Reservation r, RoomInventory inventory) throws InvalidBookingException {
+
+        if (r.roomType == null || r.roomType.isEmpty()) {
+            throw new InvalidBookingException("Room type cannot be empty");
+        }
+
+        if (!inventory.getAllRooms().containsKey(r.roomType)) {
+            throw new InvalidBookingException("Invalid room type: " + r.roomType);
+        }
+
+        int available = inventory.getAvailability(r.roomType);
+
+        if (available <= 0) {
+            throw new InvalidBookingException("No rooms available for " + r.roomType);
+        }
+    }
+}
+
 // ---------------- ROOM CLASSES ----------------
 abstract class Room {
     String type;
@@ -36,7 +71,7 @@ class SuiteRoom extends Room {
     }
 }
 
-// ---------------- UC3 ----------------
+// ---------------- INVENTORY ----------------
 class RoomInventory {
 
     private HashMap<String, Integer> availability;
@@ -52,8 +87,15 @@ class RoomInventory {
         return availability.get(roomType);
     }
 
-    void reduceRoom(String roomType) {
-        availability.put(roomType, availability.get(roomType) - 1);
+    void reduceRoom(String roomType) throws InvalidBookingException {
+
+        int current = availability.get(roomType);
+
+        if (current <= 0) {
+            throw new InvalidBookingException("Cannot reduce. No rooms left for " + roomType);
+        }
+
+        availability.put(roomType, current - 1);
     }
 
     HashMap<String, Integer> getAllRooms() {
@@ -61,7 +103,7 @@ class RoomInventory {
     }
 }
 
-// ---------------- UC4 ----------------
+// ---------------- SEARCH ----------------
 class SearchService {
 
     void searchAvailableRooms(RoomInventory inventory) {
@@ -88,7 +130,7 @@ class SearchService {
     }
 }
 
-// ---------------- UC5 ----------------
+// ---------------- RESERVATION ----------------
 class Reservation {
     String reservationId;
     String guestName;
@@ -105,6 +147,7 @@ class Reservation {
     }
 }
 
+// ---------------- QUEUE ----------------
 class BookingQueue {
 
     private Queue<Reservation> queue;
@@ -122,7 +165,7 @@ class BookingQueue {
     }
 }
 
-// ---------------- UC8 ----------------
+// ---------------- HISTORY ----------------
 class BookingHistory {
 
     private List<Reservation> history;
@@ -140,14 +183,16 @@ class BookingHistory {
     }
 }
 
-// ---------------- UC6 ----------------
+// ---------------- BOOKING SERVICE ----------------
 class BookingService {
 
     private HashMap<String, Set<String>> allocatedRooms;
     private BookingHistory history;
+    private BookingValidator validator;
 
     BookingService(BookingHistory history) {
         this.history = history;
+        this.validator = new BookingValidator();
         allocatedRooms = new HashMap<>();
     }
 
@@ -160,37 +205,36 @@ class BookingService {
         while (!queue.isEmpty()) {
 
             Reservation r = queue.poll();
-            String roomType = r.roomType;
 
-            int available = inventory.getAvailability(roomType);
+            try {
+                // VALIDATION (UC9)
+                validator.validate(r, inventory);
 
-            if (available > 0) {
+                String roomType = r.roomType;
 
                 String roomId = roomType.substring(0, 2).toUpperCase()
                         + "_" + UUID.randomUUID().toString().substring(0, 5);
 
                 allocatedRooms.putIfAbsent(roomType, new HashSet<>());
+                allocatedRooms.get(roomType).add(roomId);
 
-                if (!allocatedRooms.get(roomType).contains(roomId)) {
+                inventory.reduceRoom(roomType);
 
-                    allocatedRooms.get(roomType).add(roomId);
-                    inventory.reduceRoom(roomType);
+                System.out.println("Booking Confirmed for " + r.guestName +
+                        " | Room ID: " + roomId);
 
-                    System.out.println("Booking Confirmed for " + r.guestName +
-                            " | Room ID: " + roomId);
+                history.addReservation(r);
 
-                    // ✅ UC8 → store history
-                    history.addReservation(r);
-                }
+            } catch (InvalidBookingException e) {
 
-            } else {
-                System.out.println("Booking Failed for " + r.guestName);
+                System.out.println("Booking Failed for " + r.guestName +
+                        " → " + e.getMessage());
             }
         }
     }
 }
 
-// ---------------- UC7 ----------------
+// ---------------- ADD-ONS ----------------
 class AddOnService {
     String name;
     double cost;
@@ -213,28 +257,9 @@ class AddOnServiceManager {
         serviceMap.putIfAbsent(reservationId, new ArrayList<>());
         serviceMap.get(reservationId).add(service);
     }
-
-    void displayServices(String reservationId) {
-
-        List<AddOnService> services = serviceMap.get(reservationId);
-
-        if (services == null) {
-            System.out.println("No services.");
-            return;
-        }
-
-        double total = 0;
-
-        for (AddOnService s : services) {
-            System.out.println(s.name + " ₹" + s.cost);
-            total += s.cost;
-        }
-
-        System.out.println("Total: ₹" + total);
-    }
 }
 
-// ---------------- UC8 REPORT ----------------
+// ---------------- REPORT ----------------
 class BookingReportService {
 
     void showAllBookings(BookingHistory history) {
@@ -261,23 +286,16 @@ public class BookMyStayApp {
 
         BookingQueue queue = new BookingQueue();
 
-        Reservation r1 = new Reservation("Alice", "Single Room");
-        Reservation r2 = new Reservation("Bob", "Double Room");
+        // VALID + INVALID cases (UC9)
+        queue.addRequest(new Reservation("Alice", "Single Room"));
+        queue.addRequest(new Reservation("Bob", "Double Room"));
+        queue.addRequest(new Reservation("Charlie", "Invalid Room")); // invalid
 
-        queue.addRequest(r1);
-        queue.addRequest(r2);
-
-        // UC8
         BookingHistory history = new BookingHistory();
 
         BookingService service = new BookingService(history);
         service.processBookings(queue, inventory);
 
-        // UC7
-        AddOnServiceManager manager = new AddOnServiceManager();
-        manager.addService(r1.reservationId, new AddOnService("Breakfast", 200));
-
-        // UC8 Report
         BookingReportService report = new BookingReportService();
         report.showAllBookings(history);
     }
