@@ -186,7 +186,55 @@ class BookingService {
         }
     }
 }
+// ---------------- UC7 ----------------
+class AddOnService {
+    String name;
+    double cost;
 
+    AddOnService(String name, double cost) {
+        this.name = name;
+        this.cost = cost;
+    }
+}
+
+class AddOnServiceManager {
+
+    private HashMap<String, List<AddOnService>> serviceMap;
+
+    AddOnServiceManager() {
+        serviceMap = new HashMap<>();
+    }
+
+    void addService(String reservationId, AddOnService service) {
+
+        serviceMap.putIfAbsent(reservationId, new ArrayList<>());
+
+        serviceMap.get(reservationId).add(service);
+
+        System.out.println("Added service: " + service.name + " to Reservation: " + reservationId);
+    }
+
+    void displayServices(String reservationId) {
+
+        System.out.println("\nServices for Reservation: " + reservationId);
+
+        List<AddOnService> services = serviceMap.get(reservationId);
+
+        if (services == null) {
+            System.out.println("No services added.");
+            return;
+        }
+
+        double total = 0;
+
+        for (AddOnService s : services) {
+            System.out.println(s.name + " - ₹" + s.cost);
+            total += s.cost;
+        }
+
+        System.out.println("Total Add-on Cost: ₹" + total);
+    }
+}
 // ---------------- MAIN ----------------
 public class BookMyStayApp {
 
@@ -215,5 +263,18 @@ public class BookMyStayApp {
         // UC6
         BookingService bookingService = new BookingService();
         bookingService.processBookings(bookingQueue, inventory);
+
+        // ---------------- UC7 ----------------
+AddOnServiceManager serviceManager = new AddOnServiceManager();
+
+// create a sample reservation
+Reservation r1 = new Reservation("David", "Single Room");
+
+// add services
+serviceManager.addService(r1.reservationId, new AddOnService("Breakfast", 200));
+serviceManager.addService(r1.reservationId, new AddOnService("Airport Pickup", 500));
+
+// display services
+serviceManager.displayServices(r1.reservationId);
     }
 }
