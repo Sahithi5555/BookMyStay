@@ -1,9 +1,10 @@
 /**
  * BookMyStay Application
- * @version 11.0
+ * @version 12.0
  */
 
 import java.util.*;
+import java.io.*;
 
 // ---------------- EXCEPTION ----------------
 class InvalidBookingException extends Exception {
@@ -34,10 +35,6 @@ abstract class Room {
     Room(String t, int b, double p) {
         type = t; beds = b; price = p;
     }
-
-    void display() {
-        System.out.println(type + " | Beds: " + beds + " | ₹" + price);
-    }
 }
 
 class SingleRoom extends Room { SingleRoom() { super("Single Room",1,1000);} }
@@ -45,7 +42,7 @@ class DoubleRoom extends Room { DoubleRoom() { super("Double Room",2,2000);} }
 class SuiteRoom extends Room { SuiteRoom() { super("Suite Room",3,5000);} }
 
 // ---------------- INVENTORY ----------------
-class RoomInventory {
+class RoomInventory implements Serializable {
 
     private HashMap<String,Integer> map = new HashMap<>();
 
@@ -69,19 +66,8 @@ class RoomInventory {
     HashMap<String,Integer> getAllRooms(){ return map; }
 }
 
-// ---------------- SEARCH ----------------
-class SearchService {
-    void search(RoomInventory inv) {
-        System.out.println("\nAvailable Rooms:");
-        for(String t : inv.getAllRooms().keySet()) {
-            if(inv.getAvailability(t) > 0)
-                System.out.println(t + " → " + inv.getAvailability(t));
-        }
-    }
-}
-
 // ---------------- RESERVATION ----------------
-class Reservation {
+class Reservation implements Serializable {
     String id;
     String guest;
     String roomType;
@@ -93,27 +79,23 @@ class Reservation {
     }
 }
 
+// ---------------- HISTORY ----------------
+class BookingHistory implements Serializable {
+    List<Reservation> list = new ArrayList<>();
+
+    void add(Reservation r){ list.add(r); }
+    List<Reservation> getAll(){ return list; }
+}
+
 // ---------------- QUEUE ----------------
 class BookingQueue {
     Queue<Reservation> q = new LinkedList<>();
 
     synchronized void add(Reservation r){ q.add(r); }
-
-    synchronized Reservation get(){
-        return q.poll();
-    }
+    synchronized Reservation get(){ return q.poll(); }
 }
 
-// ---------------- HISTORY ----------------
-class BookingHistory {
-    List<Reservation> list = new ArrayList<>();
-
-    void add(Reservation r){ list.add(r); }
-    void remove(Reservation r){ list.remove(r); }
-    List<Reservation> getAll(){ return list; }
-}
-
-// ---------------- BOOKING SERVICE ----------------
+// ---------------- BOOKING ----------------
 class BookingService {
 
     HashMap<String,String> map = new HashMap<>();
@@ -134,11 +116,10 @@ class BookingService {
             map.put(r.id, roomId);
             history.add(r);
 
-            System.out.println(Thread.currentThread().getName()
-                    + " → Booked " + r.guest + " | " + roomId);
+            System.out.println("Booked → " + r.guest + " | " + roomId);
 
         } catch(Exception e){
-            System.out.println("Failed: " + r.guest + " → " + e.getMessage());
+            System.out.println("Failed → " + r.guest + " : " + e.getMessage());
         }
     }
 }
@@ -167,49 +148,46 @@ class BookingThread extends Thread {
     }
 }
 
-// ---------------- ADDONS ----------------
-class AddOnService {
-    String name; double cost;
-    AddOnService(String n,double c){name=n;cost=c;}
-}
+// ---------------- PERSISTENCE (UC12) ----------------
+class PersistenceService {
 
-class AddOnManager {
-    HashMap<String,List<AddOnService>> map = new HashMap<>();
+    void save(RoomInventory inv, BookingHistory history) {
 
-    void add(String id, AddOnService s){
-        map.putIfAbsent(id,new ArrayList<>());
-        map.get(id).add(s);
+        try {
+            FileOutputStream file = new FileOutputStream("data.ser");
+            ObjectOutputStream out = new ObjectOutputStream(file);
+
+            out.writeObject(inv);
+            out.writeObject(history);
+
+            out.close();
+            file.close();
+
+            System.out.println("Data saved successfully.");
+
+        } catch (Exception e) {
+            System.out.println("Save failed.");
+        }
     }
-}
 
-// ---------------- CANCELLATION ----------------
-class CancellationService {
-    Stack<String> stack = new Stack<>();
+    Object[] load() {
 
-    void cancel(String id, BookingService s, BookingHistory h, RoomInventory inv){
+        try {
+            FileInputStream file = new FileInputStream("data.ser");
+            ObjectInputStream in = new ObjectInputStream(file);
 
-        if(!s.map.containsKey(id)){
-            System.out.println("Invalid cancel ID");
-            return;
-        }
+            RoomInventory inv = (RoomInventory) in.readObject();
+            BookingHistory history = (BookingHistory) in.readObject();
 
-        String roomId = s.map.get(id);
-        stack.push(roomId);
+            in.close();
+            file.close();
 
-        Reservation remove=null;
+            System.out.println("Data loaded successfully.");
+            return new Object[]{inv, history};
 
-        for(Reservation r:h.getAll()){
-            if(r.id.equals(id)){
-                remove=r;
-                inv.increase(r.roomType);
-                break;
-            }
-        }
-
-        if(remove!=null){
-            h.remove(remove);
-            s.map.remove(id);
-            System.out.println("Cancelled → "+id);
+        } catch (Exception e) {
+            System.out.println("No previous data found. Starting fresh.");
+            return null;
         }
     }
 }
@@ -219,26 +197,32 @@ public class BookMyStayApp {
 
     public static void main(String[] args) {
 
-        System.out.println("Welcome to BookMyStay v11");
+        System.out.println("Welcome to BookMyStay v12");
 
-        RoomInventory inv = new RoomInventory();
+        PersistenceService ps = new PersistenceService();
 
-        new SearchService().search(inv);
+        RoomInventory inventory;
+        BookingHistory history;
+
+        Object[] data = ps.load();
+
+        if (data != null) {
+            inventory = (RoomInventory) data[0];
+            history = (BookingHistory) data[1];
+        } else {
+            inventory = new RoomInventory();
+            history = new BookingHistory();
+        }
 
         BookingQueue queue = new BookingQueue();
 
-        queue.add(new Reservation("A","Single Room"));
-        queue.add(new Reservation("B","Double Room"));
-        queue.add(new Reservation("C","Suite Room"));
-        queue.add(new Reservation("D","Single Room"));
-
-        BookingHistory history = new BookingHistory();
+        queue.add(new Reservation("Alice","Single Room"));
+        queue.add(new Reservation("Bob","Double Room"));
 
         BookingService service = new BookingService(history);
 
-        // MULTI THREADING
-        Thread t1 = new BookingThread(queue, service, inv);
-        Thread t2 = new BookingThread(queue, service, inv);
+        Thread t1 = new BookingThread(queue, service, inventory);
+        Thread t2 = new BookingThread(queue, service, inventory);
 
         t1.start();
         t2.start();
@@ -248,6 +232,8 @@ public class BookMyStayApp {
             t2.join();
         }catch(Exception e){}
 
-        System.out.println("\nAll bookings processed safely.");
+        ps.save(inventory, history);
+
+        System.out.println("System state persisted.");
     }
 }
